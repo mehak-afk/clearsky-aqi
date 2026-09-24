@@ -1,0 +1,27 @@
+{
+  "name": "ClearSky AQI — Air quality forecast",
+  "short_name": "ClearSky AQI",
+  "description": "Explore hourly US AQI forecasts for places around the world.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f6fbfb",
+  "theme_color": "#f5fbfc",
+  "categories": ["weather", "utilities"],
+  "icons": [
+    {
+      "src": "assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

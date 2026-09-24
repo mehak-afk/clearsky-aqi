@@ -21,6 +21,11 @@ const resultPanel = document.querySelector("#result-panel");
 const newSearchButton = document.querySelector("#new-search-button");
 const hourlyList = document.querySelector("#hourly-list");
 const trendChart = document.querySelector("#trend-chart");
+const installButton = document.querySelector("#install-button");
+const appMessage = document.querySelector("#app-message");
+const appMessageText = document.querySelector("#app-message-text");
+const appMessageAction = document.querySelector("#app-message-action");
+const appMessageDismiss = document.querySelector("#app-message-dismiss");
 
 let selectedLocation = null;
 let searchTimer = null;
@@ -29,6 +34,8 @@ let latestSearch = "";
 let locationOptions = [];
 let activeLocationIndex = -1;
 let lastForecastData = null;
+let deferredInstallPrompt = null;
+let refreshingForUpdate = false;
 
 function toIsoDate(date) {
   const year = date.getFullYear();
@@ -77,6 +84,37 @@ function setLoading(isLoading) {
   button.querySelector("span").textContent = isLoading ? "Loading outlook…" : "See forecast";
   form.setAttribute("aria-busy", String(isLoading));
   loadingPanel.hidden = !isLoading;
+}
+
+function showAppMessage(message, { actionLabel = "", action = null, dismissible = true } = {}) {
+  appMessageText.textContent = message;
+  appMessageAction.hidden = !action;
+  appMessageAction.textContent = actionLabel;
+  appMessageAction.onclick = action;
+  appMessageDismiss.hidden = !dismissible;
+  appMessage.hidden = false;
+}
+
+function hideAppMessage() {
+  appMessage.hidden = true;
+  appMessageAction.onclick = null;
+}
+
+function isSecureAppContext() {
+  return window.isSecureContext || ["localhost", "127.0.0.1"].includes(window.location.hostname);
+}
+
+function isInstalledApp() {
+  return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+}
+
+function isIosDevice() {
+  return /iPad|iPhone|iPod/.test(window.navigator.userAgent) ||
+    (window.navigator.platform === "MacIntel" && window.navigator.maxTouchPoints > 1);
+}
+
+function updateInstallControl() {
+  installButton.hidden = isInstalledApp() || (!deferredInstallPrompt && !isIosDevice());
 }
 
 function locationLabel(location) {
@@ -441,5 +479,82 @@ newSearchButton.addEventListener("click", () => {
   form.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" });
 });
 
+appMessageDismiss.addEventListener("click", hideAppMessage);
+
+installButton.addEventListener("click", async () => {
+  if (!deferredInstallPrompt) {
+    if (isIosDevice()) {
+      showAppMessage("To install on iPhone or iPad, use Share, then Add to Home Screen.", { dismissible: true });
+    }
+    return;
+  }
+
+  installButton.disabled = true;
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+  installButton.disabled = false;
+  updateInstallControl();
+});
+
+window.addEventListener("beforeinstallprompt", (event) => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  updateInstallControl();
+});
+
+window.addEventListener("appinstalled", () => {
+  deferredInstallPrompt = null;
+  updateInstallControl();
+  showAppMessage("ClearSky AQI is installed. Launch it anytime from your apps.", { dismissible: true });
+});
+
+window.addEventListener("offline", () => {
+  showAppMessage("You’re offline. Live AQI forecasts need a connection.", { dismissible: true });
+});
+
+window.addEventListener("online", () => {
+  if (!appMessage.hidden && appMessageText.textContent.includes("offline")) {
+    showAppMessage("You’re back online. Live AQI forecasts are ready to refresh.", { dismissible: true });
+  }
+});
+
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator) || !isSecureAppContext()) return;
+
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!refreshingForUpdate) return;
+    window.location.reload();
+  });
+
+  navigator.serviceWorker.register("service-worker.js").then((registration) => {
+    const offerUpdate = () => {
+      if (!registration.waiting) return;
+      showAppMessage("A newer ClearSky AQI app is ready.", {
+        actionLabel: "Refresh",
+        action: () => {
+          refreshingForUpdate = true;
+          registration.waiting.postMessage({ type: "SKIP_WAITING" });
+        },
+        dismissible: true
+      });
+    };
+
+    registration.addEventListener("updatefound", () => {
+      const worker = registration.installing;
+      if (!worker) return;
+      worker.addEventListener("statechange", () => {
+        if (worker.state === "installed" && navigator.serviceWorker.controller) offerUpdate();
+      });
+    });
+
+    offerUpdate();
+  }).catch(() => {
+    // The live forecast experience remains available without offline support.
+  });
+}
+
 setupForecastInputs();
 restoreLastSearch();
+updateInstallControl();
+registerServiceWorker();

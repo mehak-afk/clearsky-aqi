@@ -4,6 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#f5fbfc" />
+  <meta name="application-name" content="ClearSky AQI" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="ClearSky AQI" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="assets/icon-192.png" />
   <title>ClearSky AQI — Future air quality forecasts</title>
   <meta name="description" content="Search any place and explore its hourly US AQI forecast for the next seven days." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -21,6 +27,7 @@
     </a>
     <div class="nav-actions">
       <span class="nav-status"><i aria-hidden="true"></i> 7-day outlook</span>
+      <button id="install-button" class="install-button" type="button" hidden>Install app</button>
       <a class="nav-link" href="#how-it-works">How it works</a>
     </div>
   </nav>
@@ -100,6 +107,11 @@
       </form>
 
       <div id="status-message" class="status-message" role="status" aria-live="polite"></div>
+      <div id="app-message" class="app-message" role="status" aria-live="polite" hidden>
+        <span id="app-message-text"></span>
+        <button id="app-message-action" type="button" hidden></button>
+        <button id="app-message-dismiss" type="button" aria-label="Dismiss app message">×</button>
+      </div>
       <section id="loading-panel" class="loading-panel" aria-label="Loading forecast" hidden><div class="skeleton skeleton-score"></div><div class="skeleton skeleton-pollutants"></div><div class="skeleton skeleton-chart"></div></section>
 
       <section id="result-panel" class="result-panel" aria-labelledby="result-title" hidden tabindex="-1">

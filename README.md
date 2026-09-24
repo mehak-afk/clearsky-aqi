@@ -6,6 +6,10 @@ A browser-only air-quality forecast page. Search for a place, select a local hou
 
 Open `index.html` in a modern browser. No installation, server, account, or API key is needed.
 
+## Install as an app
+
+On a supported browser, use the **Install app** button or the browser’s install menu to add ClearSky AQI to your device. The installed app opens in its own window and keeps the interface available after the first visit. Live location search and AQI forecasts always require a connection and are never cached as offline data.
+
 ## Data and limits
 
 - Location search: [Open-Meteo Geocoding API](https://open-meteo.com/en/docs/geocoding-api)
