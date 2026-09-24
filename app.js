@@ -16,13 +16,19 @@ const timeInput = document.querySelector("#time-input");
 const button = document.querySelector("#forecast-button");
 const statusMessage = document.querySelector("#status-message");
 const emptyPanel = document.querySelector("#empty-panel");
+const loadingPanel = document.querySelector("#loading-panel");
 const resultPanel = document.querySelector("#result-panel");
 const newSearchButton = document.querySelector("#new-search-button");
+const hourlyList = document.querySelector("#hourly-list");
+const trendChart = document.querySelector("#trend-chart");
 
 let selectedLocation = null;
 let searchTimer = null;
 let searchController = null;
 let latestSearch = "";
+let locationOptions = [];
+let activeLocationIndex = -1;
+let lastForecastData = null;
 
 function toIsoDate(date) {
   const year = date.getFullYear();
@@ -35,24 +41,22 @@ function dateRange() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const max = new Date(today);
-  // Open-Meteo's seven forecast days include today, so the final calendar date is today + 6.
   max.setDate(max.getDate() + MAX_FORECAST_DAYS - 1);
   return { min: toIsoDate(today), max: toIsoDate(max) };
 }
 
 function populateTimeOptions() {
-  const formatter = new Intl.DateTimeFormat(undefined, { hour: "numeric", hour12: true });
+  const formatter = new Intl.DateTimeFormat(undefined, { hour: "numeric", hour12: true, timeZone: "UTC" });
   timeInput.innerHTML = "";
 
   for (let hour = 0; hour < 24; hour += 1) {
     const option = document.createElement("option");
     option.value = String(hour).padStart(2, "0");
-    option.textContent = formatter.format(new Date(2026, 0, 1, hour));
+    option.textContent = formatter.format(new Date(Date.UTC(2026, 0, 1, hour)));
     timeInput.append(option);
   }
 
-  const nextHour = new Date().getHours() + 1;
-  timeInput.value = String(nextHour % 24).padStart(2, "0");
+  timeInput.value = String((new Date().getHours() + 1) % 24).padStart(2, "0");
 }
 
 function setupForecastInputs() {
@@ -70,36 +74,53 @@ function setStatus(message = "", type = "") {
 
 function setLoading(isLoading) {
   button.disabled = isLoading;
-  button.querySelector("span").textContent = isLoading ? "Building forecast…" : "Check forecast";
+  button.querySelector("span").textContent = isLoading ? "Loading outlook…" : "See forecast";
   form.setAttribute("aria-busy", String(isLoading));
+  loadingPanel.hidden = !isLoading;
 }
 
 function locationLabel(location) {
   return [location.name, location.admin1, location.country].filter(Boolean).join(", ");
 }
 
+function locationSubtitle(location) {
+  return [location.admin1, location.country].filter(Boolean).join(", ") || "Location";
+}
+
 function clearLocationResults() {
+  locationOptions = [];
+  activeLocationIndex = -1;
   locationResults.innerHTML = "";
   locationResults.classList.remove("has-results");
   locationInput.setAttribute("aria-expanded", "false");
+  locationInput.removeAttribute("aria-activedescendant");
 }
 
 function selectLocation(location, { persistText = true } = {}) {
   selectedLocation = location;
   if (persistText) locationInput.value = location.name;
+  locationInput.removeAttribute("aria-invalid");
   chosenLocation.textContent = `Selected: ${locationLabel(location)}`;
   clearLocationResults();
 }
 
 function showLocationResults(locations) {
   clearLocationResults();
+  locationOptions = locations;
 
-  locations.forEach((location) => {
+  locations.forEach((location, index) => {
     const option = document.createElement("button");
     option.type = "button";
+    option.id = `location-option-${index}`;
     option.className = "location-option";
     option.setAttribute("role", "option");
-    option.innerHTML = `<strong>${escapeHtml(location.name)}</strong><span>${escapeHtml(locationLabel({ ...location, name: "" }).replace(/^, /, ""))}</span>`;
+    option.setAttribute("aria-selected", "false");
+
+    const name = document.createElement("strong");
+    name.textContent = location.name;
+    const meta = document.createElement("span");
+    meta.textContent = locationSubtitle(location);
+    option.append(name, meta);
     option.addEventListener("click", () => selectLocation(location));
     locationResults.append(option);
   });
@@ -108,14 +129,18 @@ function showLocationResults(locations) {
   locationInput.setAttribute("aria-expanded", "true");
 }
 
-function escapeHtml(value) {
-  return String(value ?? "").replace(/[&<>'"]/g, (character) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    "'": "&#39;",
-    "\"": "&quot;"
-  })[character]);
+function setActiveLocationOption(index) {
+  if (!locationOptions.length) return;
+  activeLocationIndex = (index + locationOptions.length) % locationOptions.length;
+  const options = [...locationResults.querySelectorAll(".location-option")];
+  options.forEach((option, optionIndex) => {
+    const isActive = optionIndex === activeLocationIndex;
+    option.classList.toggle("active", isActive);
+    option.setAttribute("aria-selected", String(isActive));
+  });
+  const activeOption = options[activeLocationIndex];
+  locationInput.setAttribute("aria-activedescendant", activeOption.id);
+  activeOption.scrollIntoView({ block: "nearest" });
 }
 
 async function searchLocations(query) {
@@ -128,26 +153,29 @@ async function searchLocations(query) {
   if (!response.ok) throw new Error("Location search is unavailable right now.");
 
   const payload = await response.json();
-  if (latestSearch !== query) return;
+  if (latestSearch !== query || locationInput.value.trim() !== query) return;
 
   const locations = payload.results || [];
   if (locations.length) {
     showLocationResults(locations);
-    chosenLocation.textContent = "Choose the place you mean from the list.";
+    chosenLocation.textContent = "Use the arrow keys, or choose the place you mean from the list.";
   } else {
     clearLocationResults();
-    chosenLocation.textContent = "No matching places found. Try a city, town, or postcode.";
+    chosenLocation.textContent = "No matching places found. Try a city, town, postcode, or add a country.";
   }
 }
 
 function scheduleLocationSearch() {
   const query = locationInput.value.trim();
   selectedLocation = null;
+  locationInput.removeAttribute("aria-invalid");
   clearLocationResults();
-
+  latestSearch = query;
   window.clearTimeout(searchTimer);
+  if (searchController) searchController.abort();
+
   if (query.length < 2) {
-    chosenLocation.textContent = "Start typing to find a place.";
+    chosenLocation.textContent = "Type two or more letters, then choose a location.";
     return;
   }
 
@@ -156,36 +184,30 @@ function scheduleLocationSearch() {
     try {
       await searchLocations(query);
     } catch (error) {
-      if (error.name !== "AbortError") {
-        chosenLocation.textContent = error.message;
-      }
+      if (error.name !== "AbortError") chosenLocation.textContent = error.message;
     }
   }, SEARCH_DELAY);
 }
 
 function getCategory(aqi) {
-  if (aqi <= 50) return { key: "good", label: "Good", advice: "Air quality is satisfactory. Enjoy normal outdoor activity." };
-  if (aqi <= 100) return { key: "moderate", label: "Moderate", advice: "Acceptable for most people. Unusually sensitive people may want to take it easy outdoors." };
-  if (aqi <= 150) return { key: "sensitive", label: "Unhealthy for sensitive groups", advice: "Children, older adults, and people with heart or lung conditions should reduce prolonged outdoor exertion." };
-  if (aqi <= 200) return { key: "unhealthy", label: "Unhealthy", advice: "Consider reducing prolonged outdoor activity, especially if you are sensitive to air pollution." };
-  if (aqi <= 300) return { key: "very-unhealthy", label: "Very unhealthy", advice: "Avoid prolonged outdoor exertion. Sensitive groups should stay indoors where possible." };
-  return { key: "hazardous", label: "Hazardous", advice: "Avoid outdoor activity. Follow local public-health guidance and keep indoor air as clean as possible." };
+  if (aqi <= 50) return { key: "good", label: "Good", advice: "Air quality is satisfactory. Normal outdoor plans look good.", action: "Enjoy your usual plans" };
+  if (aqi <= 100) return { key: "moderate", label: "Moderate", advice: "Acceptable for most people. If you are unusually sensitive, consider easing off prolonged exertion.", action: "Most plans are comfortable" };
+  if (aqi <= 150) return { key: "sensitive", label: "Unhealthy for sensitive groups", advice: "Children, older adults, and people with heart or lung conditions should reduce prolonged outdoor exertion.", action: "Sensitive groups: take it easier" };
+  if (aqi <= 200) return { key: "unhealthy", label: "Unhealthy", advice: "Consider reducing prolonged outdoor activity, especially if you are sensitive to air pollution.", action: "Consider shorter outdoor time" };
+  if (aqi <= 300) return { key: "very-unhealthy", label: "Very unhealthy", advice: "Avoid prolonged outdoor exertion. Sensitive groups should stay indoors where possible.", action: "Reduce outdoor exposure" };
+  return { key: "hazardous", label: "Hazardous", advice: "Avoid outdoor activity. Follow local public-health guidance and keep indoor air as clean as possible.", action: "Avoid outdoor activity" };
 }
 
 function validateForecastRequest() {
   const { min, max } = dateRange();
   const date = dateInput.value;
-
   if (!selectedLocation) {
-    throw new Error("Choose a location from the suggestions before checking its forecast.");
+    locationInput.setAttribute("aria-invalid", "true");
+    locationInput.focus();
+    throw new Error("Choose one of the suggested places so we can locate the forecast.");
   }
-  if (!date || date < min || date > max) {
-    throw new Error(`Choose a date from ${min} through ${max}. Forecasts are limited to the next 7 days.`);
-  }
+  if (!date || date < min || date > max) throw new Error(`Choose a date from ${min} through ${max}. Forecasts are limited to the next 7 days.`);
   if (!timeInput.value) throw new Error("Choose a local forecast time.");
-  if (date === min && Number(timeInput.value) <= new Date().getHours()) {
-    throw new Error("Choose a later local hour today, or select a future date.");
-  }
 }
 
 async function getForecast() {
@@ -215,9 +237,7 @@ function number(value, digits = 0) {
 function formatForecastDate(dateValue) {
   const [year, month, day] = dateValue.split("-").map(Number);
   const reference = new Date(Date.UTC(year, month - 1, day, 12));
-  const weekday = new Intl.DateTimeFormat(undefined, { weekday: "short", timeZone: "UTC" }).format(reference);
-  const monthDay = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", timeZone: "UTC" }).format(reference);
-  return `${weekday}, ${monthDay}`;
+  return new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }).format(reference);
 }
 
 function formatForecastTime(dateValue, hourValue) {
@@ -227,20 +247,34 @@ function formatForecastTime(dateValue, hourValue) {
   return `${formatForecastDate(dateValue)}, ${clock}`;
 }
 
-function renderResult(data) {
-  const target = selectedTimestamp();
-  const index = data.hourly.time.indexOf(target);
-  if (index === -1) {
-    throw new Error("That local hour is not available yet. Choose another time within the 7-day forecast window.");
-  }
+function getDayEntries(hourly, dateValue) {
+  const prefix = `${dateValue}T`;
+  return hourly.time.map((time, index) => ({ time, index, aqi: Math.round(hourly.us_aqi[index]) })).filter((entry) => entry.time.startsWith(prefix) && Number.isFinite(entry.aqi));
+}
 
-  const hourly = data.hourly;
-  const aqi = Math.round(hourly.us_aqi[index]);
+function getHourlySnapshot(data, target) {
+  const index = data.hourly.time.indexOf(target);
+  if (index === -1) throw new Error("That local hour is not available yet. Choose another time within the 7-day forecast window.");
+  return { index, hourly: data.hourly, aqi: Math.round(data.hourly.us_aqi[index]) };
+}
+
+function updateMetricTrend(metric, hourly, index) {
+  const element = document.querySelector(`#${metric}-trend`);
+  const value = Number(hourly[metric === "pm25" ? "pm2_5" : metric === "pm10" ? "pm10" : metric === "ozone" ? "ozone" : "nitrogen_dioxide"][index]);
+  const previous = Number(hourly[metric === "pm25" ? "pm2_5" : metric === "pm10" ? "pm10" : metric === "ozone" ? "ozone" : "nitrogen_dioxide"][index - 1]);
+  if (!Number.isFinite(value) || !Number.isFinite(previous)) { element.textContent = "—"; return; }
+  const difference = value - previous;
+  element.textContent = Math.abs(difference) < .1 ? "steady" : difference > 0 ? "↑ rising" : "↓ easing";
+}
+
+function renderForecastDetails() {
+  const target = selectedTimestamp();
+  const { index, hourly, aqi } = getHourlySnapshot(lastForecastData, target);
   const category = getCategory(aqi);
   const readableTime = formatForecastTime(dateInput.value, timeInput.value);
 
   document.querySelector("#result-location").textContent = locationLabel(selectedLocation);
-  document.querySelector("#result-time").textContent = `${readableTime} local time (${data.timezone})`;
+  document.querySelector("#result-time").textContent = `${readableTime} local time (${lastForecastData.timezone})`;
   document.querySelector("#aqi-score").textContent = aqi;
   document.querySelector("#aqi-category").textContent = category.label;
   document.querySelector("#aqi-guidance").textContent = category.advice;
@@ -248,49 +282,91 @@ function renderResult(data) {
   document.querySelector("#pm10-value").textContent = number(hourly.pm10[index], 1);
   document.querySelector("#ozone-value").textContent = number(hourly.ozone[index], 1);
   document.querySelector("#no2-value").textContent = number(hourly.nitrogen_dioxide[index], 1);
+  updateMetricTrend("pm25", hourly, index);
+  updateMetricTrend("pm10", hourly, index);
+  updateMetricTrend("ozone", hourly, index);
+  updateMetricTrend("no2", hourly, index);
 
   const summary = document.querySelector("#aqi-summary");
   summary.className = `aqi-summary category-${category.key}`;
-  renderHourlyList(hourly, target);
-
-  resultPanel.hidden = false;
-  emptyPanel.hidden = true;
-  setStatus("Forecast ready. Values are model forecasts, not live measurements.");
+  document.querySelector("#aqi-marker").style.left = `${Math.min(97, Math.max(0, (aqi / 350) * 100))}%`;
+  renderDaySummary(hourly);
+  renderHourlyTrend(hourly, target);
   saveLastSearch();
-  resultPanel.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-function renderHourlyList(hourly, target) {
-  const list = document.querySelector("#hourly-list");
-  const caption = document.querySelector("#hourly-caption");
-  const dayPrefix = `${dateInput.value}T`;
-  const indices = hourly.time.map((time, index) => ({ time, index })).filter(({ time }) => time.startsWith(dayPrefix));
+function renderDaySummary(hourly) {
+  const entries = getDayEntries(hourly, dateInput.value);
+  const best = entries.reduce((lowest, entry) => entry.aqi < lowest.aqi ? entry : lowest, entries[0]);
+  const highest = entries.reduce((peak, entry) => entry.aqi > peak.aqi ? entry : peak, entries[0]);
+  const hourLabel = (entry) => formatForecastTime(dateInput.value, entry.time.slice(11, 13)).split(", ").pop();
+  document.querySelector("#hourly-caption").textContent = formatForecastDate(dateInput.value);
+  document.querySelector("#day-summary").textContent = `Lowest forecast: AQI ${best.aqi} at ${hourLabel(best)} · Highest: AQI ${highest.aqi} at ${hourLabel(highest)}.`;
+}
+
+function createTrendSvg(entries, selectedIndex) {
+  const width = 720;
+  const height = 145;
+  const padX = 9;
+  const padY = 12;
+  const maxAqi = Math.max(50, ...entries.map((entry) => entry.aqi));
+  const x = (position) => padX + (position / Math.max(1, entries.length - 1)) * (width - padX * 2);
+  const y = (aqi) => height - padY - (aqi / maxAqi) * (height - padY * 2);
+  const points = entries.map((entry, position) => `${x(position).toFixed(1)},${y(entry.aqi).toFixed(1)}`);
+  const area = `M ${x(0)},${height - padY} L ${points.join(" L ")} L ${x(entries.length - 1)},${height - padY} Z`;
+  const circles = entries.map((entry, position) => `<circle class="trend-point${entry.index === selectedIndex ? " selected" : ""}" cx="${x(position).toFixed(1)}" cy="${y(entry.aqi).toFixed(1)}" r="${entry.index === selectedIndex ? 5.4 : 2.5}" />`).join("");
+  return `<svg viewBox="0 0 ${width} ${height}" aria-hidden="true" preserveAspectRatio="none"><path class="trend-area" d="${area}"/><polyline class="trend-line" points="${points.join(" ")}"/>${circles}</svg>`;
+}
+
+function renderHourlyTrend(hourly, target) {
+  const entries = getDayEntries(hourly, dateInput.value);
   const selectedIndex = hourly.time.indexOf(target);
-  const selectedPosition = indices.findIndex(({ index }) => index === selectedIndex);
-  const start = Math.max(0, Math.min(selectedPosition - 3, indices.length - 8));
-  const visible = indices.slice(start, start + 8);
+  trendChart.innerHTML = createTrendSvg(entries, selectedIndex);
+  hourlyList.innerHTML = "";
 
-  caption.textContent = formatForecastDate(dateInput.value);
-  list.innerHTML = "";
-
-  visible.forEach(({ time, index }) => {
-    const hour = Number(time.slice(11, 13));
-    const label = new Intl.DateTimeFormat(undefined, { hour: "numeric", hour12: true, timeZone: "UTC" }).format(new Date(Date.UTC(2026, 0, 1, hour)));
-    const aqi = Math.round(hourly.us_aqi[index]);
-    const chip = document.createElement("div");
-    chip.className = `hour-chip ${getCategory(aqi).key}${index === selectedIndex ? " selected" : ""}`;
-    chip.innerHTML = `<span>${label}</span><strong>${aqi}</strong>`;
-    chip.setAttribute("aria-label", `${label}, AQI ${aqi}${index === selectedIndex ? ", selected" : ""}`);
-    list.append(chip);
+  entries.forEach((entry) => {
+    const hour = entry.time.slice(11, 13);
+    const category = getCategory(entry.aqi);
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = `hour-chip ${category.key}${entry.index === selectedIndex ? " selected" : ""}`;
+    chip.setAttribute("aria-pressed", String(entry.index === selectedIndex));
+    const label = formatForecastTime(dateInput.value, hour).split(", ").pop();
+    chip.setAttribute("aria-label", `${label}, AQI ${entry.aqi}, ${category.label}${entry.index === selectedIndex ? ", selected" : ""}`);
+    const time = document.createElement("span");
+    time.textContent = label;
+    const value = document.createElement("strong");
+    value.textContent = entry.aqi;
+    chip.append(time, value);
+    chip.addEventListener("click", () => selectTimelineHour(hour));
+    hourlyList.append(chip);
   });
+
+  const selectedChip = hourlyList.querySelector(".selected");
+  if (selectedChip) selectedChip.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", inline: "center", block: "nearest" });
+}
+
+function selectTimelineHour(hour) {
+  timeInput.value = hour;
+  try {
+    renderForecastDetails();
+    setStatus(`Updated to ${formatForecastTime(dateInput.value, hour)}.`, "");
+  } catch (error) {
+    setStatus(error.message, "error");
+  }
+}
+
+function renderResult(data, { scrollToResult = true } = {}) {
+  lastForecastData = data;
+  renderForecastDetails();
+  resultPanel.hidden = false;
+  emptyPanel.hidden = true;
+  setStatus("Forecast ready. Explore any hour in the trend without loading again.");
+  if (scrollToResult) resultPanel.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
 }
 
 function saveLastSearch() {
-  const snapshot = {
-    location: selectedLocation,
-    date: dateInput.value,
-    time: timeInput.value
-  };
+  const snapshot = { location: selectedLocation, date: dateInput.value, time: timeInput.value };
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot)); } catch { /* Storage is optional. */ }
 }
 
@@ -302,16 +378,47 @@ function restoreLastSearch() {
     selectLocation(saved.location);
     dateInput.value = saved.date >= min && saved.date <= max ? saved.date : min;
     timeInput.value = saved.time || timeInput.value;
+    chosenLocation.textContent += " Select See forecast to refresh this saved place.";
   } catch { /* A malformed or unavailable value should not block the app. */ }
+}
+
+function applyPreset(name) {
+  const { min, max } = dateRange();
+  const date = new Date(`${min}T12:00:00`);
+  let hour = (new Date().getHours() + 1) % 24;
+  if (name === "morning") { date.setDate(date.getDate() + 1); hour = 9; }
+  if (name === "evening") { date.setDate(date.getDate() + 1); hour = 18; }
+  const value = toIsoDate(date);
+  dateInput.value = value > max ? max : value;
+  timeInput.value = String(hour).padStart(2, "0");
+  setStatus(`${name === "next" ? "Next available hour" : name === "morning" ? "Tomorrow morning" : "Tomorrow evening"} selected.`, "");
+  timeInput.focus();
 }
 
 locationInput.addEventListener("input", scheduleLocationSearch);
 locationInput.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") clearLocationResults();
+  const hasOptions = locationOptions.length > 0 && locationResults.classList.contains("has-results");
+  if (event.key === "ArrowDown" && hasOptions) { event.preventDefault(); setActiveLocationOption(activeLocationIndex + 1); }
+  if (event.key === "ArrowUp" && hasOptions) { event.preventDefault(); setActiveLocationOption(activeLocationIndex - 1); }
+  if (event.key === "Enter" && hasOptions && activeLocationIndex >= 0) { event.preventDefault(); selectLocation(locationOptions[activeLocationIndex]); }
+  if (event.key === "Escape") { clearLocationResults(); }
+  if (event.key === "Tab") clearLocationResults();
 });
 
 document.addEventListener("click", (event) => {
   if (!event.target.closest(".location-field")) clearLocationResults();
+});
+
+document.querySelectorAll("[data-preset]").forEach((preset) => preset.addEventListener("click", () => applyPreset(preset.dataset.preset)));
+
+timeInput.addEventListener("change", () => {
+  if (lastForecastData && !resultPanel.hidden) selectTimelineHour(timeInput.value);
+});
+
+dateInput.addEventListener("change", () => {
+  if (lastForecastData && !resultPanel.hidden) {
+    try { renderForecastDetails(); } catch { setStatus("Select See forecast to load that date's forecast.", ""); }
+  }
 });
 
 form.addEventListener("submit", async (event) => {
@@ -331,7 +438,7 @@ form.addEventListener("submit", async (event) => {
 
 newSearchButton.addEventListener("click", () => {
   locationInput.focus();
-  window.scrollTo({ top: form.getBoundingClientRect().top + window.scrollY - 24, behavior: "smooth" });
+  form.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" });
 });
 
 setupForecastInputs();
