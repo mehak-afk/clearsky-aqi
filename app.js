@@ -212,6 +212,21 @@ function number(value, digits = 0) {
   return Number.isFinite(numeric) ? numeric.toFixed(digits) : "—";
 }
 
+function formatForecastDate(dateValue) {
+  const [year, month, day] = dateValue.split("-").map(Number);
+  const reference = new Date(Date.UTC(year, month - 1, day, 12));
+  const weekday = new Intl.DateTimeFormat(undefined, { weekday: "short", timeZone: "UTC" }).format(reference);
+  const monthDay = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", timeZone: "UTC" }).format(reference);
+  return `${weekday}, ${monthDay}`;
+}
+
+function formatForecastTime(dateValue, hourValue) {
+  const [year, month, day] = dateValue.split("-").map(Number);
+  const hour = Number(hourValue);
+  const clock = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1, day, hour)));
+  return `${formatForecastDate(dateValue)}, ${clock}`;
+}
+
 function renderResult(data) {
   const target = selectedTimestamp();
   const index = data.hourly.time.indexOf(target);
@@ -222,11 +237,10 @@ function renderResult(data) {
   const hourly = data.hourly;
   const aqi = Math.round(hourly.us_aqi[index]);
   const category = getCategory(aqi);
-  const localDate = new Date(`${target}:00`);
-  const readableTime = new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(localDate);
+  const readableTime = formatForecastTime(dateInput.value, timeInput.value);
 
   document.querySelector("#result-location").textContent = locationLabel(selectedLocation);
-  document.querySelector("#result-time").textContent = `${readableTime} local time`;
+  document.querySelector("#result-time").textContent = `${readableTime} local time (${data.timezone})`;
   document.querySelector("#aqi-score").textContent = aqi;
   document.querySelector("#aqi-category").textContent = category.label;
   document.querySelector("#aqi-guidance").textContent = category.advice;
@@ -256,13 +270,12 @@ function renderHourlyList(hourly, target) {
   const start = Math.max(0, Math.min(selectedPosition - 3, indices.length - 8));
   const visible = indices.slice(start, start + 8);
 
-  const dateTitle = new Intl.DateTimeFormat(undefined, { weekday: "long", month: "short", day: "numeric" }).format(new Date(`${dateInput.value}T12:00:00`));
-  caption.textContent = dateTitle;
+  caption.textContent = formatForecastDate(dateInput.value);
   list.innerHTML = "";
 
   visible.forEach(({ time, index }) => {
     const hour = Number(time.slice(11, 13));
-    const label = new Intl.DateTimeFormat(undefined, { hour: "numeric", hour12: true }).format(new Date(2026, 0, 1, hour));
+    const label = new Intl.DateTimeFormat(undefined, { hour: "numeric", hour12: true, timeZone: "UTC" }).format(new Date(Date.UTC(2026, 0, 1, hour)));
     const aqi = Math.round(hourly.us_aqi[index]);
     const chip = document.createElement("div");
     chip.className = `hour-chip ${getCategory(aqi).key}${index === selectedIndex ? " selected" : ""}`;

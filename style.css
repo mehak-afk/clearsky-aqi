@@ -234,7 +234,6 @@ footer { padding: 27px 0; color: var(--muted); background: #0d0b22; font-size: .
   .aqi-summary { min-height: 250px; padding: 25px; }
   .pollutant-card, .hourly-card { padding: 20px; }
   .hourly-list { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .hour-chip:nth-child(n+9) { display: none; }
   .steps-grid { grid-template-columns: 1fr; gap: 18px; margin-top: 31px; }
   .how-section { padding: 57px 0; }
   .footer-inner { align-items: flex-start; flex-direction: column; gap: 14px; }
