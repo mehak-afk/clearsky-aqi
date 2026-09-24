@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0f1024" />
+  <title>ClearSky AQI — Future air quality forecasts</title>
+  <meta name="description" content="Search any place and check its hourly US AQI forecast for the next seven days." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="style.css" />
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#forecast">Skip to forecast</a>
+
+  <nav class="nav" aria-label="Primary navigation">
+    <a class="brand" href="#top" aria-label="ClearSky AQI home">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 48 48"><path d="M11 29.5a11.5 11.5 0 011.5-22.9A14 14 0 0138 13.4a8.5 8.5 0 01-1.9 16.8H11.8"/><path d="M15 35h18M19 41h10"/></svg>
+      </span>
+      <span>ClearSky <b>AQI</b></span>
+    </a>
+    <a class="nav-link" href="#how-it-works">How it works</a>
+  </nav>
+
+  <main id="top">
+    <section class="hero">
+      <div class="hero-orb orb-one" aria-hidden="true"></div>
+      <div class="hero-orb orb-two" aria-hidden="true"></div>
+      <div class="container hero-content">
+        <p class="eyebrow"><span aria-hidden="true"></span> Hourly forecast intelligence</p>
+        <h1>Know the air<br /><em>before you go.</em></h1>
+        <p class="hero-copy">Search any place to see its predicted air quality at a future hour — with a clear view of what is in the air and what to do about it.</p>
+        <div class="forecast-window"><span class="pulse-dot" aria-hidden="true"></span> Forecasts available for the next 7 days</div>
+      </div>
+    </section>
+
+    <section id="forecast" class="container forecast-section" aria-labelledby="forecast-title">
+      <div class="section-heading">
+        <p class="section-kicker">PLAN AHEAD</p>
+        <h2 id="forecast-title">Find your forecast</h2>
+        <p>Choose a place, date, and local time. We’ll show the provider’s closest hourly AQI forecast.</p>
+      </div>
+
+      <form id="forecast-form" class="search-card" novalidate>
+        <div class="search-grid">
+          <div class="field location-field">
+            <label for="location-input">Location</label>
+            <div class="input-wrap">
+              <svg class="field-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-5.4 7-12a7 7 0 10-14 0c0 6.6 7 12 7 12z"/><circle cx="12" cy="9" r="2.25"/></svg>
+              <input id="location-input" name="location" type="search" placeholder="City, town, or postcode" autocomplete="off" aria-autocomplete="list" aria-controls="location-results" aria-expanded="false" required />
+            </div>
+            <div id="location-results" class="location-results" role="listbox" aria-label="Location suggestions"></div>
+            <p id="chosen-location" class="field-note" aria-live="polite">Start typing to find a place.</p>
+          </div>
+
+          <div class="field">
+            <label for="date-input">Forecast date</label>
+            <div class="input-wrap">
+              <svg class="field-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18"/></svg>
+              <input id="date-input" name="date" type="date" required />
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="time-input">Local time</label>
+            <div class="input-wrap">
+              <svg class="field-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
+              <select id="time-input" name="time" required aria-label="Local forecast time"></select>
+            </div>
+          </div>
+
+          <button id="forecast-button" class="forecast-button" type="submit">
+            <span>Check forecast</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg>
+          </button>
+        </div>
+        <p class="form-helper">AQI forecasts are available up to 7 days ahead. Dates beyond the provider’s forecast window are not shown.</p>
+      </form>
+
+      <div id="status-message" class="status-message" role="status" aria-live="polite"></div>
+
+      <section id="result-panel" class="result-panel" aria-labelledby="result-title" hidden>
+        <div class="result-topline">
+          <div>
+            <p class="section-kicker">AQI FORECAST</p>
+            <h2 id="result-title">Air quality outlook</h2>
+          </div>
+          <button id="new-search-button" class="text-button" type="button">New search</button>
+        </div>
+
+        <div class="place-line">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-5.4 7-12a7 7 0 10-14 0c0 6.6 7 12 7 12z"/><circle cx="12" cy="9" r="2.25"/></svg>
+          <span id="result-location"></span>
+          <span class="divider" aria-hidden="true"></span>
+          <time id="result-time"></time>
+        </div>
+
+        <div class="result-grid">
+          <article id="aqi-summary" class="aqi-summary category-good">
+            <div class="aqi-score-wrap">
+              <p>US AQI</p>
+              <strong id="aqi-score">—</strong>
+              <span id="aqi-category">—</span>
+            </div>
+            <div class="aqi-guidance">
+              <span class="guidance-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 109 9"/><path d="M12 7v5l3.5 2M16 4l4 4-4 4"/></svg>
+              </span>
+              <div>
+                <p class="guidance-label">WHAT THIS MEANS</p>
+                <p id="aqi-guidance">—</p>
+              </div>
+            </div>
+          </article>
+
+          <aside class="pollutant-card" aria-labelledby="pollutant-title">
+            <div class="card-heading">
+              <h3 id="pollutant-title">What’s in the air</h3>
+              <span>Forecasted</span>
+            </div>
+            <dl class="pollutant-list">
+              <div><dt><span class="pollutant-dot pm25"></span>PM2.5</dt><dd id="pm25-value">—</dd><small>µg/m³</small></div>
+              <div><dt><span class="pollutant-dot pm10"></span>PM10</dt><dd id="pm10-value">—</dd><small>µg/m³</small></div>
+              <div><dt><span class="pollutant-dot ozone"></span>Ozone</dt><dd id="ozone-value">—</dd><small>µg/m³</small></div>
+              <div><dt><span class="pollutant-dot no2"></span>NO₂</dt><dd id="no2-value">—</dd><small>µg/m³</small></div>
+            </dl>
+          </aside>
+        </div>
+
+        <article class="hourly-card" aria-labelledby="hourly-title">
+          <div class="card-heading hourly-heading">
+            <div>
+              <p class="section-kicker">HOURLY VIEW</p>
+              <h3 id="hourly-title">AQI through the day</h3>
+            </div>
+            <span id="hourly-caption"></span>
+          </div>
+          <div id="hourly-list" class="hourly-list" aria-label="Hourly AQI forecast for selected date"></div>
+        </article>
+
+        <p class="forecast-disclaimer"><strong>Forecast, not a measurement.</strong> This result is an hourly model forecast supplied by Open-Meteo/CAMS. Conditions can change and local exposure may vary.</p>
+      </section>
+
+      <section id="empty-panel" class="empty-panel" aria-labelledby="empty-title">
+        <span class="empty-icon" aria-hidden="true">
+          <svg viewBox="0 0 48 48"><path d="M11 29.5a11.5 11.5 0 011.5-22.9A14 14 0 0138 13.4a8.5 8.5 0 01-1.9 16.8H11.8"/><path d="M15 35h18M19 41h10"/></svg>
+        </span>
+        <div>
+          <p class="section-kicker">READY WHEN YOU ARE</p>
+          <h2 id="empty-title">Your future air outlook starts here.</h2>
+          <p>Search for a location above to see a forecast for a specific local hour.</p>
+        </div>
+      </section>
+    </section>
+
+    <section id="how-it-works" class="how-section">
+      <div class="container">
+        <p class="section-kicker">HOW IT WORKS</p>
+        <h2>Simple inputs. Useful context.</h2>
+        <div class="steps-grid">
+          <article><span>01</span><h3>Find a place</h3><p>We match your search to a real location and its coordinates.</p></article>
+          <article><span>02</span><h3>Pick a future hour</h3><p>Choose any forecast hour across the next seven days.</p></article>
+          <article><span>03</span><h3>Plan with clarity</h3><p>See the AQI category, pollutants, and practical guidance.</p></article>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container footer-inner">
+      <a class="brand footer-brand" href="#top"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M11 29.5a11.5 11.5 0 011.5-22.9A14 14 0 0138 13.4a8.5 8.5 0 01-1.9 16.8H11.8"/><path d="M15 35h18M19 41h10"/></svg></span>ClearSky <b>AQI</b></a>
+      <p>Air-quality forecast data: <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo</a> with <a href="https://atmosphere.copernicus.eu/" target="_blank" rel="noopener noreferrer">CAMS ENSEMBLE</a>. No account or personal data required.</p>
+    </div>
+  </footer>
+</body>
+</html>
